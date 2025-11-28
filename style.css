@@ -1,7 +1,6 @@
 html,body{margin:0;padding:0;background:#f4f7f6;font-family:system-ui;}
 #app{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;}
 #stage{width:min(92vmin,640px);aspect-ratio:1/1;background:#e8f3ef;border-radius:16px;position:relative;overflow:hidden;box-shadow:0 6px 30px rgba(0,0,0,.08);}
-#stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;}
 #loading{position:absolute;top:12px;left:12px;color:#2d2d2d;opacity:.65;pointer-events:none;}
 #startBtn{padding:10px 16px;border-radius:12px;border:1px solid #ddd;background:#fff;cursor:pointer}
 #hud{font-size:12px;color:#2d2d2d;opacity:.7}
@@ -197,4 +196,24 @@ html,body{margin:0;padding:0;background:#f4f7f6;font-family:system-ui;}
   font-size:12px;
   color:#2d2d2d;
   opacity:.8;
+}
+
+
+/* 中心舞台区域 , playtest2, v1.0.3*/
+#stage {
+  position: relative;
+  overflow: hidden;
+  background-color: #e8f3ef;  /* 舞台底色，选你喜欢的薄荷绿/浅色 */
+}
+
+/* 所有视频堆叠在同一个位置，用透明度控制显示 */
+#stage video {
+  position: absolute;
+  inset: 0;                /* top:0; right:0; bottom:0; left:0; 的简写 */
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;              /* 默认看不见 */
+  transition: opacity 80ms linear;  /* 很短的一点点过渡，避免突兀 */
+  background-color: #e8f3ef;  /* 视频没画面时也用同样底色，防止白块 */
 }

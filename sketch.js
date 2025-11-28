@@ -571,53 +571,38 @@ function setMuted(on){
   }
 }
 
-//新版视频切换函数，v1.0.2
+//新版视频切换函数，v1.0.3
 function switchTo(name){
   if(!videos[name]) return;
-  if(current === name) return;   // 相同状态就不切了
+  if(current === name) return;   // 同一个状态不用切
 
   current = name;
 
-  // 1. 暂停并隐藏所有视频
+  // 1. 把所有视频先暂停并变透明
   for(const key in videos){
     const v = videos[key];
+    if(!v) continue;
     v.pause();
-    v.style.display = "none";
+    v.style.opacity = "0";
   }
 
+  // 2. 目标视频从头开始播放，并渐显出来
   const target = videos[name];
 
-  // 2. 先把时间重设到 0（有的浏览器需要 try 包一下）
   try{
-    target.currentTime = 0;
+    target.currentTime = 0;      // 跳回第一帧
   }catch(e){
-    // 有些浏览器在 metadata 未加载完时会报错，可忽略
+    // 某些浏览器 metadata 未加载完会报错，忽略
   }
 
-  // 一个真正开始播放的函数
-  const startPlay = ()=>{
-    target.style.display = "block";
-    const p = target.play();
-    if(p && p.catch){
-      p.catch(()=>{ /* autoplay 拦截就算了 */ });
-    }
-  };
+  // 先变成不透明，这时候还会是第一帧（或上一次的第一帧），然后开始播放
+  target.style.opacity = "1";
 
-  // 3. 如果已经有足够数据可以从头播放，就直接播
-  if(target.readyState >= 2){    // HAVE_CURRENT_DATA
-    startPlay();
-  }else{
-    // 否则等到 loadeddata 再显示，避免闪出旧的尾帧
-    const onLoaded = ()=>{
-      target.removeEventListener("loadeddata", onLoaded);
-      startPlay();
-    };
-    target.addEventListener("loadeddata", onLoaded);
-    target.load();  // 强制重新加载这一段，清掉上一次的停留帧
+  const p = target.play();
+  if(p && p.catch){
+    p.catch(()=>{});             // autoplay 被拦截就忽略
   }
 }
-
-
 
 
 
