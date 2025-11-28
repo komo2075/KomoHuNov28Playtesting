@@ -62,6 +62,25 @@ function setup(){
   $("loudTH").addEventListener("input", e=> LOUD_TH = parseFloat(e.target.value));
   $("calBtn").addEventListener("click", calibrate2s);
 
+  //新控制playtest2
+    // 打开 / 关闭 Settings 和 Help 弹窗
+    $("settingsBtn").addEventListener("click", openSettings);
+    $("settingsClose").addEventListener("click", closeSettings);
+    $("settingsBackdrop").addEventListener("click", closeSettings);
+
+    $("helpBtn").addEventListener("click", openHelp);
+    $("helpClose").addEventListener("click", closeHelp);
+    $("helpBackdrop").addEventListener("click", closeHelp);
+  
+    // ESC 关闭所有弹窗
+    window.addEventListener("keydown", (e)=>{
+      if(e.key === "Escape"){
+        closeSettings();
+        closeHelp();
+      }
+    });
+
+
   // 设备选择
   $("refreshBtn").addEventListener("click", listMics);
   $("micSelect").addEventListener("change", async ()=>{
@@ -316,3 +335,25 @@ async function calibrate2s(){
 }
 
 function clamp(x,a,b){ return Math.max(a, Math.min(b, x)); }
+
+
+//playtest2 设置弹窗
+function openSettings(){
+  const el = $("settingsOverlay");
+  if(el) el.classList.add("active");
+}
+
+function closeSettings(){
+  const el = $("settingsOverlay");
+  if(el) el.classList.remove("active");
+}
+
+function openHelp(){
+  const el = $("helpOverlay");
+  if(el) el.classList.add("active");
+}
+
+function closeHelp(){
+  const el = $("helpOverlay");
+  if(el) el.classList.remove("active");
+}

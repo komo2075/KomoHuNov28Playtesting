@@ -12,10 +12,22 @@
   <div id="app">
     <div id="loading">Loading…</div>
 
-    <button id="startBtn">Start</button>
+    <!-- 中心区域：只显示角色和两个按钮 -->
+    <div id="stageWrapper">
+      <div id="stage"></div>
+      <button id="startBtn">Start</button>
 
-    <div id="stage"></div>
+      <div id="floatingButtons">
+        <button id="helpBtn" class="icon-btn">
+          <img src="assets/icon_help.png" alt="Help">
+        </button>
+        <button id="settingsBtn" class="icon-btn">
+          <img src="assets/icon_settings.png" alt="Settings">
+        </button>
+      </div>
+    </div>
 
+    <!-- 可以保留一个小 HUD，如果你想也可以在 CSS 里隐藏 -->
     <div id="hud">
       <span id="stateTxt">state: live</span>
       <span id="micTxt">mic: idle</span>
@@ -23,49 +35,67 @@
       <span id="dbTxt">~ dB: -∞</span>
     </div>
 
-    <!-- Controls for testers -->
-    <div id="panel">
-      <button id="calBtn">Calibrate 2s</button>
-      <button id="muteBtn">Mute Mic</button>  <!-- 新增：闭麦按钮 -->
+    <!-- ========== 设置弹窗（里面是原来的调试面板） ========== -->
+    <div id="settingsOverlay" class="overlay">
+      <div class="overlay-backdrop" id="settingsBackdrop"></div>
+      <div class="overlay-card">
+        <button class="close-btn" id="settingsClose">×</button>
+        <h2 class="overlay-title">Settings</h2>
 
-      <label> Sensitivity
-        <input id="sens" type="range" min="0.05" max="4" value="1" step="0.05"> <!-- 调低最小值 -->
-      </label>
-      <label> Soft TH
-        <input id="softTH" type="range" min="0.001" max="0.1" value="0.02" step="0.001">
-      </label>
-      <label> Loud TH
-        <input id="loudTH" type="range" min="0.05" max="0.5" value="0.12" step="0.01">
-      </label>
-      <div id="meterWrap">
-        <div id="meterBar"></div>
+        <div id="panel">
+          <button id="calBtn">Calibrate 2s</button>
+          <button id="muteBtn">Mute Mic</button>
+
+          <label> Mic
+            <select id="micSelect"></select>
+          </label>
+          <button id="refreshBtn">Refresh</button>
+
+          <label> Sensitivity
+            <input id="sens" type="range" min="0.05" max="4" value="1" step="0.05">
+          </label>
+          <label> Soft TH
+            <input id="softTH" type="range" min="0.001" max="0.1" value="0.02" step="0.001">
+          </label>
+          <label> Loud TH
+            <input id="loudTH" type="range" min="0.05" max="0.5" value="0.12" step="0.01">
+          </label>
+
+          <div id="meterWrap">
+            <div id="meterBar"></div>
+          </div>
+          <div id="tips">
+            Tip: If level stays at 0, check browser mic permission or click Start again.
+          </div>
+        </div>
       </div>
-      <div id="tips">
-        Tip: If level stays at 0, check browser mic permission or click Start again.
-      </div>
-      <label> Mic
-        <select id="micSelect"></select>
-      </label>
-      <button id="refreshBtn">Refresh</button>
     </div>
 
-    <details id="guide" open>
-      <summary>How to Test</summary>
-      <ol>
-        <li>Click <b>Start</b> and allow microphone access.</li>
-        <li>Tap the stage once → <b>Happy</b> for 1.2 s.</li>
-        <li>Clap or make a loud sound → <b>Shy</b> for 1.2 s.</li>
-        <li>Stay quiet or do nothing for 30 s → <b>Sleep</b> mode.</li>
-        <li>Speak or hum softly → stays in <b>Live</b> (awake).</li>
-      </ol>
-      <p><b>Troubleshooting</b></p>
-      <ul>
-        <li>If nothing happens, check microphone permission in your browser.</li>
-        <li>Make sure the correct input device is selected in system settings.</li>
-        <li>Too much background noise may trigger <b>Shy</b> too often.</li>
-        <li>On mobile, keep videos muted for stable autoplay.</li>
-      </ul>
-    </details>
+    <!-- ========== 指南弹窗（交互说明） ========== -->
+    <div id="helpOverlay" class="overlay">
+      <div class="overlay-backdrop" id="helpBackdrop"></div>
+      <div class="overlay-card">
+        <button class="close-btn" id="helpClose">×</button>
+        <h2 class="overlay-title">How to Test</h2>
+        <div id="helpContent">
+          <ol>
+            <li>Click <b>Start</b> and allow microphone access.</li>
+            <li>Tap the stage once → <b>Happy</b> for 1.2 s.</li>
+            <li>Clap or make a loud sound → <b>Shy</b> for 1.2 s.</li>
+            <li>Stay quiet or do nothing for 30 s → <b>Sleep</b> mode.</li>
+            <li>Speak or hum softly → stays in <b>Live</b> (awake).</li>
+          </ol>
+          <p><b>Troubleshooting</b></p>
+          <ul>
+            <li>If nothing happens, check microphone permission in your browser.</li>
+            <li>Make sure the correct input device is selected in system settings.</li>
+            <li>Too much background noise may trigger <b>Shy</b> too often.</li>
+            <li>On mobile, keep videos muted for stable autoplay.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
   </div>
   <script src="sketch.js"></script>
 </body>

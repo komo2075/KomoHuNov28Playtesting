@@ -53,3 +53,148 @@ html,body{margin:0;padding:0;background:#f4f7f6;font-family:system-ui;}
 
 /* 新增闭麦按钮样式 */
 #muteBtn.muted{ background:#ffeaea; border-color:#ffb3b3; }
+
+
+/* 中心区域，只显示角色 */
+#stageWrapper{
+  position:relative;
+  width:min(92vmin,640px);
+  aspect-ratio:1/1;
+  background:#e8f3ef;
+  border-radius:16px;
+  box-shadow:0 6px 30px rgba(0,0,0,.08);
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+#stage{
+  position:absolute;
+  inset:0;
+}
+#startBtn{
+  position:absolute;
+  bottom:12px;
+  left:50%;
+  transform:translateX(-50%);
+  padding:8px 16px;
+  border-radius:999px;
+  border:1px solid #ddd;
+  background:#ffffffdd;
+  backdrop-filter:blur(8px);
+  cursor:pointer;
+}
+
+/* 浮动按钮区域（右上角） */
+#floatingButtons{
+  position:absolute;
+  top:10px;
+  right:10px;
+  display:flex;
+  gap:8px;
+}
+.icon-btn{
+  border:none;
+  padding:0;
+  width:48px;
+  height:48px;
+  border-radius:999px;
+  background:#ffffffcc;
+  backdrop-filter:blur(8px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  box-shadow:0 3px 10px rgba(0,0,0,.15);
+}
+.icon-btn img{
+  width:70%;
+  height:70%;
+  object-fit:contain;
+}
+
+/* 半透明卡片风格 Overlay */
+.overlay{
+  position:fixed;
+  inset:0;
+  display:none;             /* 默认隐藏 */
+  z-index:20;
+}
+.overlay.active{
+  display:block;
+}
+.overlay-backdrop{
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,.25);
+  backdrop-filter:blur(4px);
+}
+.overlay-card{
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  width:min(90vw,640px);
+  max-height:80vh;
+  background:#ffffffee;
+  border-radius:18px;
+  box-shadow:0 14px 40px rgba(0,0,0,.25);
+  padding:16px 18px 18px;
+  overflow:auto;
+}
+.overlay-title{
+  margin:0 0 8px;
+  font-size:18px;
+}
+.close-btn{
+  position:absolute;
+  top:8px;
+  right:10px;
+  width:28px;
+  height:28px;
+  border-radius:999px;
+  border:none;
+  background:#f2f2f2;
+  cursor:pointer;
+  font-size:18px;
+  line-height:1;
+}
+.close-btn:hover{
+  background:#e2e2e2;
+}
+
+/* 原 panel 在卡片里面，稍微排一下版 */
+#panel{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 12px;
+  margin-top:8px;
+  font-size:12px;
+}
+#panel label{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+#panel input[type=range]{ width:160px; }
+#meterWrap{
+  flex:1;
+  height:10px;
+  background:#eef4f2;
+  border-radius:10px;
+  overflow:hidden;
+  min-width:120px;
+}
+#meterBar{ height:100%; width:0%; background:#0a7f66; }
+#tips{ font-size:12px; color:#5b5b5b; margin-top:4px; }
+
+/* HUD 可以保持不变，如果觉得多，可以再自己调小字号或隐藏 */
+#hud{
+  margin-top:8px;
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  font-size:12px;
+  color:#2d2d2d;
+  opacity:.8;
+}
