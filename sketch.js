@@ -3,13 +3,19 @@ let SLEEP_AFTER_MS = 10000;
 let SHY_HOLD_MS    = 1200;
 let HAPPY_HOLD_MS  = 1200;
 
+// 轻音触发倾听的判定时间
+let LISTEN_TRIGGER_MS = 500;   // 持续 0.5 秒轻音就进入倾听
+let LISTEN_QUIET_MS   = 800;   // 倾听中连续安静 0.8 秒就退出
+
 // thresholds 可调或校准
 let SOFT_TH = 0.02;
 let LOUD_TH = 0.12;
 
+// 原有的灵敏度等保持不动
 let videos = {};
 let current = "live";
-let lastInputAt = 0;
+
+let lastInputAt = 0;  // 用于 sleep 判定
 let shyUntil = 0;
 let happyUntil = 0;
 let allLoaded = false;
@@ -23,7 +29,11 @@ let audioCtx, analyser, mediaStream, sourceNode;
 let timeBuf;
 
 let wakeTarget = null;  // 从睡眠里醒来之后要去的目标状态：live/happy/shy
+let listeningTarget = null;  // listening 出来的目标
 
+// 倾听触发用的小计时
+let listeningCandidateSince = 0; // 轻音开始时间
+let listeningQuietSince    = 0;  // 倾听中安静开始时间
 
 // UI refs
 const $ = (id)=>document.getElementById(id);
@@ -34,16 +44,27 @@ function setup(){
   // build videos
   const stage = $("stage");
 
-  // 新的所有视频名字
-  const videoNames = ["live","happy","sleep_in","sleep_loop","sleep_out","shy"];
+  // 所有视频的名字
+  const videoNames = [
+    "live",
+    "happy",
+    "shy",
+    "sleep_in",
+    "sleep_loop",
+    "sleep_out",
+    "listening_in",
+    "listening_loop",
+    "listening_out"
+  ];
 
   videoNames.forEach(name=>{
     const v = document.createElement("video");
     v.id = `vid-${name}`;
     v.src = `assets/${name}.mp4`;
 
-    // 入睡和醒来只播一次，其他循环
-    if(name === "sleep_in" || name === "sleep_out"){
+    // 过渡动画只播一次, 其余循环
+    if(name === "sleep_in" || name === "sleep_out" ||
+       name === "listening_in" || name === "listening_out"){
       v.loop = false;
     }else{
       v.loop = true;
@@ -56,18 +77,26 @@ function setup(){
     v.setAttribute("x5-playsinline","true");
     v.addEventListener("canplaythrough", checkLoaded, { once:true });
 
-    // 监听入睡视频播完 → 切到循环睡眠
+    // 睡眠的进出场回调
     if(name === "sleep_in"){
       v.addEventListener("ended", onSleepInEnded);
     }
-    // 监听醒来视频播完 → 执行真正要去的状态
     if(name === "sleep_out"){
       v.addEventListener("ended", onSleepOutEnded);
+    }
+
+    // 倾听的进出场回调
+    if(name === "listening_in"){
+      v.addEventListener("ended", onListeningInEnded);
+    }
+    if(name === "listening_out"){
+      v.addEventListener("ended", onListeningOutEnded);
     }
 
     stage.appendChild(v);
     videos[name] = v;
   });
+
 
 
   switchTo("live", {resetTime:false});
@@ -200,8 +229,18 @@ async function startMicWithDevice(deviceId){
 }
 
 function checkLoaded(){
-  const ready = ["live","happy","sleep_in","sleep_loop","sleep_out","shy"]
-    .every(n => videos[n].readyState >= 3);
+  const ready = [
+    "live",
+    "happy",
+    "shy",
+    "sleep_in",
+    "sleep_loop",
+    "sleep_out",
+    "listening_in",
+    "listening_loop",
+    "listening_out"
+  ].every(n => videos[n].readyState >= 3);
+
   if(ready && !allLoaded){
     allLoaded = true;
     $("loading").style.display = "none";
@@ -219,7 +258,7 @@ function draw(){
   const now = millis();
   let level = 0;
 
-  // ===== 1. 计算 level、更新 HUD =====
+  // 1 计算音量 level 和 dB 显示
   if(analyser && timeBuf){
     analyser.getFloatTimeDomainData(timeBuf);
     let sum = 0;
@@ -239,53 +278,98 @@ function draw(){
   $("lvlTxt").textContent = `level: ${level.toFixed(3)}`;
   $("meterBar").style.width = `${Math.min(100, level*100)}%`;
 
-  // 有效输入刷新计时（如果你想靠声音控制入睡，就保留这一行）
+  const isLoud = level >= LOUD_TH;
+  const isSoft = level > SOFT_TH && level < LOUD_TH;
+  const isSilent = level <= SOFT_TH;
+
+  // 任何一次有效声音或点击, 都可以认为角色被打扰过
   if(level > SOFT_TH){
     lastInputAt = now;
   }
 
-  const isLoud = level >= LOUD_TH;
-  const isSoft = level > SOFT_TH && level < LOUD_TH;
-
-  // ===== 2. 特殊处理：sleep 三个阶段单独处理 =====
-
-  // 2.1 正在播“入睡”动画：只等待视频播完，别乱切
-  if(current === "sleep_in"){
-    $("stateTxt").textContent = `state: ${current}`;
-    return; // ★★ 防止被下面逻辑改成 live / happy / shy
+  // 轻音触发倾听的候选计时, 只在 live 或刚从别的状态回来的时候生效
+  if(!isSleepState() && !isListeningState()){
+    if(isSoft){
+      if(listeningCandidateSince === 0){
+        listeningCandidateSince = now;
+      }
+    }else{
+      listeningCandidateSince = 0;
+    }
   }
 
-  // 2.2 睡眠循环阶段：这里只检测要不要醒
+  // 倾听中安静的计时
+  if(current === "listening_loop"){
+    if(isSilent){
+      if(listeningQuietSince === 0){
+        listeningQuietSince = now;
+      }
+    }else{
+      listeningQuietSince = 0;
+    }
+  }else{
+    listeningQuietSince = 0;
+  }
+
+  // 2 特殊状态优先处理, 防止闪帧
+  // 入睡中, 醒来中, 倾听进出场时, 不允许其他状态抢占
+  if(current === "sleep_in" ||
+     current === "sleep_out" ||
+     current === "listening_in" || 
+     current === "listening_out"
+    ){
+      $("stateTxt").textContent = `state: ${current}`;
+      return;
+    }
+
+  // 睡眠循环里只处理唤醒逻辑
   if(current === "sleep_loop"){
     if(isLoud){
-      // 大声吵醒 → 走 wake到 shy
       requestWake("shy");
     }else if(isSoft){
-      // 轻声叫醒 → 醒来回 live
       requestWake("live");
     }
     $("stateTxt").textContent = `state: ${current}`;
-    return; // ★★ 在睡觉时这一帧不要其它状态抢占
+    return;
   }
 
-  // 2.3 正在播“醒来”动画：等播完由 ended 回调处理
-  if(current === "sleep_out"){
+  // 倾听循环里只处理退出逻辑
+  if(current === "listening_loop"){
+    if(isLoud){
+      // 大声时会害羞, 先退出倾听再 shy
+      requestListeningExit("shy");
+    }else if(listeningQuietSince > 0 &&
+             (now - listeningQuietSince) > LISTEN_QUIET_MS){
+      // 安静一段时间, 退出倾听回 live
+      requestListeningExit("live");
+    }
     $("stateTxt").textContent = `state: ${current}`;
-    return; // ★★ 不要被下面逻辑覆盖
+    return;
   }
 
-  // ===== 3. 正常清醒状态的优先级逻辑：shy > happy > sleep_in > live =====
+  // 3 正常清醒状态优先级
+  // Shy > Happy > Listening > Sleep > Live
 
   if(isLoud){
     shyUntil = now + SHY_HOLD_MS;
     switchTo("shy");
+
   }else if(now < shyUntil){
     switchTo("shy");
+
   }else if(now < happyUntil){
     switchTo("happy");
+
+  }else if(listeningCandidateSince > 0 &&
+           (now - listeningCandidateSince) > LISTEN_TRIGGER_MS &&
+           current === "live"){
+    // 轻音持续一小段时间, 从 live 进入倾听
+    requestListeningEnter();
+
   }else if((now - lastInputAt) > SLEEP_AFTER_MS){
-    // 10 秒无互动 → 播入睡动画一次
+    // 很久没有任何声音或互动, 进入入睡动画
     switchTo("sleep_in");
+
   }else{
     switchTo("live");
   }
@@ -295,16 +379,105 @@ function draw(){
 
 
 
+
 function triggerHappy(){
   const now = millis();
   lastInputAt = now;
 
   if(isSleepState()){
-    // 在睡觉时点击 → 先醒来，再去 happy
+    // 睡觉中被点击, 先醒来再 happy
     requestWake("happy");
+  }else if(isListeningState()){
+    // 倾听中被点击, 先退出倾听再 happy
+    requestListeningExit("happy");
   }else{
     happyUntil = now + HAPPY_HOLD_MS;
     switchTo("happy");
+  }
+}
+
+
+
+//聆听，playtest2,v1.0.2
+//倾听状态判断
+function isSleepState(){
+  return current === "sleep_in" ||
+         current === "sleep_loop" ||
+         current === "sleep_out";
+}
+
+function isListeningState(){
+  return current === "listening_in" ||
+         current === "listening_loop" ||
+         current === "listening_out";
+}
+
+// 睡眠唤醒的请求, 你之前应该已经有, 这里给一个参考版
+function requestWake(target){
+  if(current !== "sleep_loop") return;
+  wakeTarget = target || "live";
+  switchTo("sleep_out");
+}
+
+function onSleepInEnded(){
+  if(current === "sleep_in"){
+    switchTo("sleep_loop");
+  }
+}
+
+function onSleepOutEnded(){
+  if(current === "sleep_out"){
+    const target = wakeTarget || "live";
+    wakeTarget = null;
+    const now = millis();
+    lastInputAt = now;
+    if(target === "happy"){
+      happyUntil = now + HAPPY_HOLD_MS;
+      switchTo("happy");
+    }else if(target === "shy"){
+      shyUntil = now + SHY_HOLD_MS;
+      switchTo("shy");
+    }else{
+      switchTo("live");
+    }
+  }
+}
+
+// 倾听进出场
+function requestListeningEnter(){
+  if(current !== "live") return;
+  listeningCandidateSince = 0;
+  switchTo("listening_in");
+}
+
+function requestListeningExit(target){
+  if(current !== "listening_loop") return;
+  listeningTarget = target || "live";
+  listeningQuietSince = 0;
+  switchTo("listening_out");
+}
+
+function onListeningInEnded(){
+  if(current === "listening_in"){
+    switchTo("listening_loop");
+  }
+}
+
+function onListeningOutEnded(){
+  if(current === "listening_out"){
+    const target = listeningTarget || "live";
+    listeningTarget = null;
+    const now = millis();
+    lastInputAt = now;
+    if(target === "happy"){
+      happyUntil = now + HAPPY_HOLD_MS;
+      switchTo("happy");
+    }else if(target === "shy"){
+      shyUntil = now + SHY_HOLD_MS;
+      switchTo("shy");
+    }else{
+      switchTo("live");
+    }
   }
 }
 
@@ -398,21 +571,55 @@ function setMuted(on){
   }
 }
 
+//新版视频切换函数，v1.0.2
+function switchTo(name){
+  if(!videos[name]) return;
+  if(current === name) return;   // 相同状态就不切了
 
-function switchTo(name, opts = {resetTime:true}){
-  if(current === name) return;
-  Object.entries(videos).forEach(([key, v])=>{
-    if(key === name){
-      v.style.display = "block";
-      if(opts.resetTime) try{ v.currentTime = 0; }catch(e){}
-      v.play().catch(()=>{});
-    }else{
-      v.style.display = "none";
-      v.pause();
-    }
-  });
   current = name;
+
+  // 1. 暂停并隐藏所有视频
+  for(const key in videos){
+    const v = videos[key];
+    v.pause();
+    v.style.display = "none";
+  }
+
+  const target = videos[name];
+
+  // 2. 先把时间重设到 0（有的浏览器需要 try 包一下）
+  try{
+    target.currentTime = 0;
+  }catch(e){
+    // 有些浏览器在 metadata 未加载完时会报错，可忽略
+  }
+
+  // 一个真正开始播放的函数
+  const startPlay = ()=>{
+    target.style.display = "block";
+    const p = target.play();
+    if(p && p.catch){
+      p.catch(()=>{ /* autoplay 拦截就算了 */ });
+    }
+  };
+
+  // 3. 如果已经有足够数据可以从头播放，就直接播
+  if(target.readyState >= 2){    // HAVE_CURRENT_DATA
+    startPlay();
+  }else{
+    // 否则等到 loadeddata 再显示，避免闪出旧的尾帧
+    const onLoaded = ()=>{
+      target.removeEventListener("loadeddata", onLoaded);
+      startPlay();
+    };
+    target.addEventListener("loadeddata", onLoaded);
+    target.load();  // 强制重新加载这一段，清掉上一次的停留帧
+  }
 }
+
+
+
+
 
 async function resumeAudio(){
   try{
