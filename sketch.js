@@ -1,5 +1,5 @@
 // ====== Tunables ======
-let SLEEP_AFTER_MS = 30000;
+let SLEEP_AFTER_MS = 10000;
 let SHY_HOLD_MS    = 1200;
 let HAPPY_HOLD_MS  = 1200;
 
@@ -22,6 +22,9 @@ let sens = 1.0;
 let audioCtx, analyser, mediaStream, sourceNode;
 let timeBuf;
 
+let wakeTarget = null;  // 从睡眠里醒来之后要去的目标状态：live/happy/shy
+
+
 // UI refs
 const $ = (id)=>document.getElementById(id);
 
@@ -30,20 +33,42 @@ function setup(){
 
   // build videos
   const stage = $("stage");
-  ["live","happy","sleep","shy"].forEach(name=>{
+
+  // 新的所有视频名字
+  const videoNames = ["live","happy","sleep_in","sleep_loop","sleep_out","shy"];
+
+  videoNames.forEach(name=>{
     const v = document.createElement("video");
     v.id = `vid-${name}`;
     v.src = `assets/${name}.mp4`;
-    v.loop = true;
+
+    // 入睡和醒来只播一次，其他循环
+    if(name === "sleep_in" || name === "sleep_out"){
+      v.loop = false;
+    }else{
+      v.loop = true;
+    }
+
     v.muted = true;
     v.playsInline = true;
     v.preload = "auto";
     v.setAttribute("webkit-playsinline","true");
     v.setAttribute("x5-playsinline","true");
     v.addEventListener("canplaythrough", checkLoaded, { once:true });
+
+    // 监听入睡视频播完 → 切到循环睡眠
+    if(name === "sleep_in"){
+      v.addEventListener("ended", onSleepInEnded);
+    }
+    // 监听醒来视频播完 → 执行真正要去的状态
+    if(name === "sleep_out"){
+      v.addEventListener("ended", onSleepOutEnded);
+    }
+
     stage.appendChild(v);
     videos[name] = v;
   });
+
 
   switchTo("live", {resetTime:false});
   $("loading").style.display = "block";
@@ -175,7 +200,8 @@ async function startMicWithDevice(deviceId){
 }
 
 function checkLoaded(){
-  const ready = ["live","happy","sleep","shy"].every(n => videos[n].readyState >= 3);
+  const ready = ["live","happy","sleep_in","sleep_loop","sleep_out","shy"]
+    .every(n => videos[n].readyState >= 3);
   if(ready && !allLoaded){
     allLoaded = true;
     $("loading").style.display = "none";
@@ -183,8 +209,9 @@ function checkLoaded(){
   }
 }
 
+
+//playtest2 主循环,v1.0.2
 function draw(){
-  // 没点 Start 就不跑；注意：闭麦时 analyser 会是 null
   if(!started){
     return;
   }
@@ -192,21 +219,19 @@ function draw(){
   const now = millis();
   let level = 0;
 
+  // ===== 1. 计算 level、更新 HUD =====
   if(analyser && timeBuf){
-    // 从 Analyser 读取时域数据，计算 RMS
     analyser.getFloatTimeDomainData(timeBuf);
     let sum = 0;
     for(let i=0;i<timeBuf.length;i++){
       const x = timeBuf[i];
       sum += x*x;
     }
-    const rms = Math.sqrt(sum / timeBuf.length);   // 0..~1
-    level = Math.min(1, Math.max(0, rms * sens * 3)); // 放大到直观 0..1
-
+    const rms = Math.sqrt(sum / timeBuf.length);
+    level = Math.min(1, Math.max(0, rms * sens * 3));
     const db = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
     $("dbTxt").textContent = `~ dB: ${isFinite(db)? db.toFixed(1): "-∞"}`;
   }else{
-    // 闭麦或未初始化：把电平视为 0，并显示 -∞
     level = 0;
     $("dbTxt").textContent = `~ dB: -∞`;
   }
@@ -214,11 +239,44 @@ function draw(){
   $("lvlTxt").textContent = `level: ${level.toFixed(3)}`;
   $("meterBar").style.width = `${Math.min(100, level*100)}%`;
 
-  // 有效输入刷新计时
-  if(level > SOFT_TH) lastInputAt = now;
+  // 有效输入刷新计时（如果你想靠声音控制入睡，就保留这一行）
+  if(level > SOFT_TH){
+    lastInputAt = now;
+  }
 
-  // 状态优先级：shy > happy > sleep > live
-  if(level >= LOUD_TH){
+  const isLoud = level >= LOUD_TH;
+  const isSoft = level > SOFT_TH && level < LOUD_TH;
+
+  // ===== 2. 特殊处理：sleep 三个阶段单独处理 =====
+
+  // 2.1 正在播“入睡”动画：只等待视频播完，别乱切
+  if(current === "sleep_in"){
+    $("stateTxt").textContent = `state: ${current}`;
+    return; // ★★ 防止被下面逻辑改成 live / happy / shy
+  }
+
+  // 2.2 睡眠循环阶段：这里只检测要不要醒
+  if(current === "sleep_loop"){
+    if(isLoud){
+      // 大声吵醒 → 走 wake到 shy
+      requestWake("shy");
+    }else if(isSoft){
+      // 轻声叫醒 → 醒来回 live
+      requestWake("live");
+    }
+    $("stateTxt").textContent = `state: ${current}`;
+    return; // ★★ 在睡觉时这一帧不要其它状态抢占
+  }
+
+  // 2.3 正在播“醒来”动画：等播完由 ended 回调处理
+  if(current === "sleep_out"){
+    $("stateTxt").textContent = `state: ${current}`;
+    return; // ★★ 不要被下面逻辑覆盖
+  }
+
+  // ===== 3. 正常清醒状态的优先级逻辑：shy > happy > sleep_in > live =====
+
+  if(isLoud){
     shyUntil = now + SHY_HOLD_MS;
     switchTo("shy");
   }else if(now < shyUntil){
@@ -226,7 +284,8 @@ function draw(){
   }else if(now < happyUntil){
     switchTo("happy");
   }else if((now - lastInputAt) > SLEEP_AFTER_MS){
-    switchTo("sleep");
+    // 10 秒无互动 → 播入睡动画一次
+    switchTo("sleep_in");
   }else{
     switchTo("live");
   }
@@ -234,12 +293,68 @@ function draw(){
   $("stateTxt").textContent = `state: ${current}`;
 }
 
+
+
 function triggerHappy(){
   const now = millis();
-  happyUntil = now + HAPPY_HOLD_MS;
   lastInputAt = now;
-  switchTo("happy");
+
+  if(isSleepState()){
+    // 在睡觉时点击 → 先醒来，再去 happy
+    requestWake("happy");
+  }else{
+    happyUntil = now + HAPPY_HOLD_MS;
+    switchTo("happy");
+  }
 }
+
+
+//playtest2 sleep state 判断
+// 入睡视频播完，切到循环睡眠
+function isSleepState(){
+  return current === "sleep_in" ||
+         current === "sleep_loop" ||
+         current === "sleep_out";
+}
+
+
+// 只允许在 “sleep_loop” 状态时申请醒来
+function requestWake(target){
+  if(current !== "sleep_loop") return;
+  wakeTarget = target || "live";
+  switchTo("sleep_out");   // 播放醒来动画视频
+}
+
+// 入睡视频结束后自动切到循环睡眠
+function onSleepInEnded(){
+  if(current === "sleep_in"){
+    switchTo("sleep_loop");
+  }
+}
+
+// 醒来视频结束后，根据 wakeTarget 决定去哪里
+function onSleepOutEnded(){
+  if(current === "sleep_out"){
+    handleWakeTarget();
+  }
+}
+
+function handleWakeTarget(){
+  const now = millis();
+  const target = wakeTarget || "live";
+  wakeTarget = null;
+
+  if(target === "happy"){
+    happyUntil = now + HAPPY_HOLD_MS;
+    switchTo("happy");
+  }else if(target === "shy"){
+    shyUntil = now + SHY_HOLD_MS;
+    switchTo("shy");
+  }else{
+    switchTo("live");
+  }
+}
+
 
 async function toggleMute(){
   if(!started){
