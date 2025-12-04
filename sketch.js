@@ -80,12 +80,17 @@ const PROMPTS = [
 // 这些数字只是示例，你可以根据视频时长微调
 const STATE_MIN_HOLD = {
   shy:           1000,  // 害羞动画大约 1s
-  happy:         8000,  // 开心状态大约 8s（你现在的 HAPPY_HOLD_MS 接近 8~10s）
+  happy:         11000,  // 开心状态大约 11s（你现在的 HAPPY_HOLD_MS 接近 8~10s）
   listening_in:  1200,  // 走上前聆听 in
   listening_out: 1200,  // 走回去 out
   sleep_in:      1500,  // 入睡动画
-  sleep_out:     1500   // 醒来动画
+  sleep_out:     1500,  // 醒来动画
   // live / listening_loop / sleep_loop 不写＝0，可以随时切
+
+  //final submission addition, v1.0.8 
+  // ★ 新增：中段循环的“锁定时长”
+  sleep_loop:     60000,  // 睡觉中间至少 60 秒完全不接新触发
+  listening_loop: 10000   // 聆听中间至少 10 秒不接新触发
 };
 
 let stateHoldUntil = 0;   // 当前状态被锁定到的时间点（毫秒，基于 millis()）
@@ -426,10 +431,10 @@ function draw(){
 
   // 睡眠循环里只处理唤醒逻辑
   if(current === "sleep_loop"){
+    //final submission addition, v1.0.8
+    // 只能被“大声”吵醒 且醒来先变害羞
     if(isLoud){
       requestWake("shy");
-    }else if(isSoft){
-      requestWake("live");
     }
     $("stateTxt").textContent = `state: ${current}`;
     return;
@@ -484,32 +489,31 @@ function draw(){
 
 
 
-
-function triggerHappy(){
-  const now = millis();
-  lastInputAt = now;
-
-  if(isSleepState()){
-    // 睡觉中被点击, 先醒来再 happy
-    requestWake("happy");
-  }else if(isListeningState()){
-    // 倾听中被点击, 先退出倾听再 happy
-    requestListeningExit("happy");
-  }else{
-    happyUntil = now + HAPPY_HOLD_MS;
-    switchTo("happy");
-  }
-}
-
-
-
-//聆听，playtest2,v1.0.2
-//倾听状态判断
+//final submission addition, v1.0.8
 function isSleepState(){
   return current === "sleep_in" ||
          current === "sleep_loop" ||
          current === "sleep_out";
 }
+
+function triggerHappy(){
+  // 1. 睡觉相关状态禁止触发 happy
+  if(isSleepState()){
+    return;
+  }
+
+  // 2. 如果当前状态还在锁定时间内，也不打断
+  const now = millis();
+  if(stateHoldUntil && now < stateHoldUntil){
+    return;
+  }
+
+  // 3. 正常 happy 逻辑
+  const now2 = millis();
+  happyUntil = now2 + HAPPY_HOLD_MS;
+  switchTo("happy");
+}
+
 
 function isListeningState(){
   return current === "listening_in" ||
@@ -592,15 +596,6 @@ function onListeningOutEnded(){
       switchTo("live");
     }
   }
-}
-
-
-//playtest2 sleep state 判断
-// 入睡视频播完，切到循环睡眠
-function isSleepState(){
-  return current === "sleep_in" ||
-         current === "sleep_loop" ||
-         current === "sleep_out";
 }
 
 
