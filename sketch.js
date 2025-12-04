@@ -3,6 +3,18 @@ let SLEEP_AFTER_MS = 10000;
 let SHY_HOLD_MS    = 1200;
 let HAPPY_HOLD_MS  = 10000;
 
+
+//final submission addition, v1.0.6
+// 防止状态切换过快
+let lastStateChangeAt = 0;
+const MIN_STATE_INTERVAL_MS = 400;  // 两次状态切换之间至少 0.4 秒
+
+//final submission addition, v1.0.6
+// 音量平滑参数
+let smoothLevel = 0;
+const LEVEL_SMOOTH_ALPHA = 0.2;  // 越小越平稳
+
+
 // 轻音触发倾听的判定时间
 let LISTEN_TRIGGER_MS = 500;   // 持续 0.5 秒轻音就进入倾听
 let LISTEN_QUIET_MS   = 800;   // 倾听中连续安静 0.8 秒就退出
@@ -46,6 +58,32 @@ let listeningQuietSince    = 0;  // 倾听中安静开始时间
 
 // UI refs
 const $ = (id)=>document.getElementById(id);
+
+//final submission addition, v1.0.6
+// 定时提示用户说话的功能
+// 每隔一段时间，如果处于 live 或 sleep_loop 状态，且一段时间内没有输入
+let lastPromptAt = 0;
+const PROMPT_INTERVAL_MS = 60000; // 每 60 秒最多问一次
+const PROMPTS = [
+  "Tell me something that happened today.",
+  "What are you working on right now.",
+  "What made you smile today."
+];
+
+function maybeShowPrompt(now){
+  // 只在 live 或 sleep_loop 这种“安静状态”下问
+  if(current !== "live" && current !== "sleep_loop") return;
+
+  if(now - lastPromptAt < PROMPT_INTERVAL_MS) return;
+
+  // 有一段时间比较安静才触发，比如 15 秒没大动静
+  if(now - lastInputAt < 15000) return;
+
+  const msg = PROMPTS[Math.floor(Math.random()*PROMPTS.length)];
+  showSpeechBubble(msg);   // 你可以用一个小 div 在舞台上方显示一条文字
+  lastPromptAt = now;
+}
+
 
 function setup(){
   noCanvas();
@@ -303,9 +341,17 @@ function draw(){
   $("lvlTxt").textContent = `level: ${level.toFixed(3)}`;
   $("meterBar").style.width = `${Math.min(100, level*100)}%`;
 
-  const isLoud = level >= LOUD_TH;
-  const isSoft = level > SOFT_TH && level < LOUD_TH;
-  const isSilent = level <= SOFT_TH;
+  // 原本的 level 是瞬时值
+  smoothLevel = smoothLevel * (1 - LEVEL_SMOOTH_ALPHA) + level * LEVEL_SMOOTH_ALPHA;
+
+
+  //final submission addition, v1.0.6
+  // 2 判定当前音量状态
+  // 后面所有逻辑用 smoothLevel 而不是 level
+  const isLoud  = smoothLevel >= LOUD_TH;
+  const isSoft  = smoothLevel > SOFT_TH && smoothLevel < LOUD_TH;
+  const isSilent = smoothLevel <= SOFT_TH;
+
 
   // 任何一次有效声音或点击, 都可以认为角色被打扰过
   if(level > SOFT_TH){
@@ -400,6 +446,8 @@ function draw(){
   }
 
   $("stateTxt").textContent = `state: ${current}`;
+
+  maybeShowPrompt(now); // final submission addition，v1.0.6
 }
 
 
@@ -600,6 +648,15 @@ function setMuted(on){
 function switchTo(name){
   if(!videos[name]) return;
   if(current === name) return;   // 同一个状态不用切
+
+  //final submission addition, v1.0.6
+  // 防止切换过快
+  const now = millis();
+  if(now - lastStateChangeAt < MIN_STATE_INTERVAL_MS){
+    return; // 切换过快，忽略
+  }
+  lastStateChangeAt = now;
+
 
   current = name;
 

@@ -217,3 +217,19 @@ html,body{margin:0;padding:0;background:#f4f7f6;font-family:system-ui;}
   transition: opacity 80ms linear;  /* 很短的一点点过渡，避免突兀 */
   background-color: #e8f3ef;  /* 视频没画面时也用同样底色，防止白块 */
 }
+
+/* final submission adding, v1.0.6 */
+/* 提示气泡 */
+#bubble{
+  position:absolute;
+  bottom: 65%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  border-radius: 12px;
+  background:#ffffffdd;
+  font-size: 12px;
+  max-width: 70%;
+  text-align:center;
+  box-shadow:0 4px 16px rgba(0,0,0,.1);
+}
