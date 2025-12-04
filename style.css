@@ -233,3 +233,22 @@ html,body{margin:0;padding:0;background:#f4f7f6;font-family:system-ui;}
   text-align:center;
   box-shadow:0 4px 16px rgba(0,0,0,.1);
 }
+
+/* final submission addition, v1.0.9 */
+/* 底部提示条：深色半透明背景，白字 */
+#promptBar{
+  margin-top:4px;
+  width:min(92vmin, 640px);
+  background:rgba(0,0,0,.55);
+  color:#fff;
+  font-size:12px;
+  padding:6px 10px;
+  border-radius:10px;
+  box-shadow:0 4px 10px rgba(0,0,0,.25);
+  text-align:left;
+  min-height:18px;
+
+  opacity:0;
+  transition:opacity 200ms ease;
+}
+

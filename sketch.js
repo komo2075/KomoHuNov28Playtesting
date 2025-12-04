@@ -1,12 +1,16 @@
 // ====== Tunables ======
-let SLEEP_AFTER_MS = 10000;
-let SHY_HOLD_MS    = 1200;
-let HAPPY_HOLD_MS  = 10000;
+let SLEEP_AFTER_MS = 80000; // 多久没声音或互动进入睡眠，80 秒
+let SHY_HOLD_MS    = 2000; // 害羞状态保持时间，2 秒
+let HAPPY_HOLD_MS  = 10000;  // 开心状态保持时间，10 秒
+
+//final submission addition, v1.0.9
+let liveEnteredAt = 0;          // 上一次进入 live 状态的时间
+
 
 //final submission addition, v1.0.7
 // 聆听冷却控制
 let lastListeningEndAt = 0;          // 最近一次“结束聆听”的时间
-const LISTEN_COOLDOWN_MS = 30000;    // 聆听结束后 30 秒内不再进入聆听
+const LISTEN_COOLDOWN_MS = 60000;    // 聆听结束后 60 秒内不再进入聆听
 
 
 //final submission addition, v1.0.6
@@ -22,7 +26,7 @@ const LEVEL_SMOOTH_ALPHA = 0.2;  // 越小越平稳
 
 // 轻音触发倾听的判定时间
 let LISTEN_TRIGGER_MS = 500;   // 持续 0.5 秒轻音就进入倾听
-let LISTEN_QUIET_MS   = 800;   // 倾听中连续安静 0.8 秒就退出
+let LISTEN_QUIET_MS   = 1000;   // 倾听中连续安静 1 秒就退出
 
 // thresholds 可调或校准
 let SOFT_TH = 0.02;
@@ -68,11 +72,13 @@ const $ = (id)=>document.getElementById(id);
 // 定时提示用户说话的功能
 // 每隔一段时间，如果处于 live 或 sleep_loop 状态，且一段时间内没有输入
 let lastPromptAt = 0;
-const PROMPT_INTERVAL_MS = 60000; // 每 60 秒最多问一次
+const PROMPT_INTERVAL_MS = 40000; // 每 40 秒最多问一次
+const PROMPT_MIN_LIVE_MS = 15000;   // 进入 live 至少 15 秒后才可能发第一条消息
 const PROMPTS = [
   "Tell me something that happened today.",
-  "What are you working on right now.",
-  "What made you smile today."
+  "What are you working on right now?",
+  "How are you today?",
+  "What's your favorite song?",
 ];
 
 //final submission addition, v1.0.7
@@ -474,8 +480,11 @@ function draw(){
     // 轻音持续一小段时间, 从 live 进入倾听
      requestListeningEnter();
 
-  }else if((now - lastInputAt) > SLEEP_AFTER_MS){
+  }else if(current === "live" &&
+           liveEnteredAt > 0 &&
+           (now - liveEnteredAt) > SLEEP_AFTER_MS){
     // 很久没有任何声音或互动, 进入入睡动画
+    // 只有在 live 状态下，保持安静超过设定时间才入睡
     switchTo("sleep_in");
 
   }else{
@@ -695,6 +704,19 @@ function switchTo(name){
 
   current = name;
 
+   // 每次离开 live（尤其是进入睡眠 / shy / happy 时），把底部提示条关掉
+  if(name !== "live"){
+    const bar = document.getElementById("promptBar");
+    if(bar){
+      bar.style.opacity = "0";
+    }
+  }
+
+  // ★ 进入 live 时，记录进入 live 的时间
+  if(name === "live"){
+    liveEnteredAt = millis();
+  }
+
    //final submission addition, v1.0.7
    // ★ 根据状态查表，设置本次最小停留时间
   const hold = STATE_MIN_HOLD[name] || 0;
@@ -815,8 +837,6 @@ function playBgm(targetKey){
 }
 
 
-
-
 async function resumeAudio(){
   try{
     if(!audioCtx) return;
@@ -889,4 +909,54 @@ function openAbout(){
 function closeAbout(){
   const el = $("aboutOverlay");
   if(el) el.classList.remove("active");
+}
+
+
+// final submission addition, v1.0.9
+// 在舞台上方显示一条文字气泡消息
+function showSpeechBubble(msg){
+  const bar = document.getElementById("promptBar");
+  if(!bar) return;
+
+  bar.textContent = msg;
+  bar.style.opacity = "1";
+
+  const now = millis();
+  lastPromptAt = now;
+
+  // 不再刷新睡眠计时，这里只负责显示文字
+  // liveEnteredAt = now;
+  // lastInputAt = now;
+
+  // 几秒后无条件淡出，不管当前状态是不是 live
+  setTimeout(()=>{
+    const bar2 = document.getElementById("promptBar");
+    if(bar2){
+      bar2.style.opacity = "0";
+    }
+  }, 5000);
+}
+
+function maybeShowPrompt(now){
+  // 只在 live 状态下才可能发主动消息
+  if(current !== "live") return;
+
+  // 状态还在锁定期就不要发，避免刚切状态就弹字
+  if(stateHoldUntil && now < stateHoldUntil){
+    return;
+  }
+
+  // 还没在 live 待够最低时间，不发
+  if(liveEnteredAt === 0 || (now - liveEnteredAt) < PROMPT_MIN_LIVE_MS){
+    return;
+  }
+
+  // 距离上一次消息间隔太短，不发
+  if(lastPromptAt > 0 && (now - lastPromptAt) < PROMPT_INTERVAL_MS){
+    return;
+  }
+
+  // 符合条件，随机挑一句
+  const msg = PROMPTS[Math.floor(Math.random() * PROMPTS.length)];
+  showSpeechBubble(msg);
 }
