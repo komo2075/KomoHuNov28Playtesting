@@ -75,6 +75,24 @@ const PROMPTS = [
   "What made you smile today."
 ];
 
+//final submission addition, v1.0.7
+// 每个状态至少要播放多久，单位 ms
+// 这些数字只是示例，你可以根据视频时长微调
+const STATE_MIN_HOLD = {
+  shy:           1000,  // 害羞动画大约 1s
+  happy:         8000,  // 开心状态大约 8s（你现在的 HAPPY_HOLD_MS 接近 8~10s）
+  listening_in:  1200,  // 走上前聆听 in
+  listening_out: 1200,  // 走回去 out
+  sleep_in:      1500,  // 入睡动画
+  sleep_out:     1500   // 醒来动画
+  // live / listening_loop / sleep_loop 不写＝0，可以随时切
+};
+
+let stateHoldUntil = 0;   // 当前状态被锁定到的时间点（毫秒，基于 millis()）
+
+
+
+
 function maybeShowPrompt(now){
   // 只在 live 或 sleep_loop 这种“安静状态”下问
   if(current !== "live" && current !== "sleep_loop") return;
@@ -356,6 +374,14 @@ function draw(){
   const isLoud  = smoothLevel >= LOUD_TH;
   const isSoft  = smoothLevel > SOFT_TH && smoothLevel < LOUD_TH;
   const isSilent = smoothLevel <= SOFT_TH;
+
+   //final submission addition, v1.0.7
+   // ★ 根据状态查表，设置本次最小停留时间
+  if(stateHoldUntil && now < stateHoldUntil){
+    // 在锁定时间内，不接受新触发，不切状态
+    $("stateTxt").textContent = `state: ${current}`;
+    return;
+  }
 
 
   // 任何一次有效声音或点击, 都可以认为角色被打扰过
@@ -673,6 +699,15 @@ function switchTo(name){
 
 
   current = name;
+
+   //final submission addition, v1.0.7
+   // ★ 根据状态查表，设置本次最小停留时间
+  const hold = STATE_MIN_HOLD[name] || 0;
+  if(hold > 0){
+    stateHoldUntil = millis() + hold;
+  }else{
+    stateHoldUntil = 0;  // 对 live / 各种 loop 不锁定
+  }
 
   // 1. 把所有视频先暂停并变透明
   for(const key in videos){
